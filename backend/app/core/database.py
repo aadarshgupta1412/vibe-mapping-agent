@@ -41,12 +41,24 @@ class DatabaseManager:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
         
         try:
-            # Create client with basic parameters - compatible with gotrue 2.8.1 and httpx 0.25.2
+            # Create client with basic parameters
             self._supabase = create_client(
                 settings.SUPABASE_URL,
                 settings.SUPABASE_KEY
             )
             logger.info("✅ Supabase client created successfully")
+        except TypeError as e:
+            if "proxy" in str(e) or "proxies" in str(e):
+                logger.error(f"❌ Supabase client version compatibility issue: {e}")
+                logger.error("💡 This is likely due to incompatible versions of supabase, httpx, or gotrue packages")
+                logger.error("💡 Try upgrading: pip install 'supabase>=2.9.0' 'httpx>=0.26.0' 'gotrue>=2.9.0'")
+                self._supabase = None
+                # Don't raise - allow app to continue with warning
+                return
+            else:
+                logger.error(f"❌ Failed to create Supabase client: {e}")
+                self._supabase = None
+                raise
         except Exception as e:
             logger.error(f"❌ Failed to create Supabase client: {e}")
             self._supabase = None
@@ -68,7 +80,7 @@ class DatabaseManager:
                     logger.warning(f"⚠️ Supabase connection test failed: {e}")
                     return False
             else:
-                logger.error("❌ Supabase client is None")
+                logger.error("❌ Supabase client is None - check initialization errors above")
                 return False
         except Exception as e:
             logger.error(f"❌ Supabase connection error: {e}")

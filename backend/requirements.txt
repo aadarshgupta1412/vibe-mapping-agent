@@ -4,12 +4,12 @@ uvicorn>=0.22.0
 python-dotenv>=1.0.0
 sse-starlette>=1.6.5
 
-# Database
-supabase>=2.3.4
+# Database - Fixed version compatibility issues
+supabase>=2.9.0,<2.10.0
 sqlalchemy>=2.0.29
-# Lock dependency versions that work with Supabase
-httpx>=0.24,<0.26
-gotrue<2.9
+# Compatible versions that work together
+httpx>=0.26.0,<0.28.0
+gotrue>=2.9.0,<3.0.0
 
 # LLM and conversation flow
 langchain==0.3.13
