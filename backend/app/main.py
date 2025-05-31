@@ -152,3 +152,8 @@ app.include_router(router, prefix=settings.API_V1_STR)
 @app.get("/")
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
+
+@app.get("/health")
+async def health_endpoint():
+    """Railway health check endpoint - responds immediately"""
+    return {"status": "healthy", "service": "vibe-mapping-agent"}
