@@ -187,9 +187,6 @@ Once the backend is running, visit:
 5. Push to your fork: `git push origin feature-name`
 6. Create a Pull Request
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 🔗 Links
 
