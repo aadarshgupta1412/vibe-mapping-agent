@@ -5,7 +5,7 @@ This module provides functionality to map vague "vibe" terms to structured produ
 It serves as a tool within the LangGraph conversation flow.
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 # Sample vibe-to-attribute mappings
 # In a real implementation, these could be more extensive or even learned from data

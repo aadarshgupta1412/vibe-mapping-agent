@@ -1,24 +1,62 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import os
-from dotenv import load_dotenv
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+import logging
+from typing import Any, Dict, List, Optional
 
-# Load environment variables
-load_dotenv()
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from app.core.config import settings
+from app.core.database import check_connection, close_db, init_db
+from app.routes import router
+from app.services.chat_service import close_chat_service, init_chat_service
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
-app = FastAPI(title="Vibe Mapping Agent API")
+app = FastAPI(title=settings.PROJECT_NAME)
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:3000")],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize services on startup
+@app.on_event("startup")
+async def startup_services():
+    logger.info("Initializing services")
+    # Initialize database connections
+    db_manager = init_db()
+    logger.info("Database connections initialized")
+    
+    # Check database connection
+    connection_ok = await check_connection()
+    if not connection_ok:
+        logger.warning("Supabase connection check failed")
+    
+    # Initialize chat service
+    init_chat_service()
+    logger.info("Chat service initialized")
+    
+# Close services on shutdown
+@app.on_event("shutdown")
+async def shutdown_services():
+    logger.info("Shutting down services")
+    # Close chat service
+    close_chat_service()
+    logger.info("Chat service closed")
+    
+    # Close database connections
+    close_db()
+    logger.info("Database connections closed")
 
 # Define models
 class Message(BaseModel):
@@ -108,53 +146,9 @@ MOCK_PRODUCTS = [
     }
 ]
 
+# Include the router in the app
+app.include_router(router, prefix=settings.API_V1_STR)
+
 @app.get("/")
 async def health_check():
-    return {"status": "ok", "message": "Vibe Mapping Agent API is running"}
-
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    # Get the last user message
-    user_messages = [msg for msg in request.messages if msg.role == "user"]
-    if not user_messages:
-        raise HTTPException(status_code=400, detail="No user messages provided")
-    
-    last_user_message = user_messages[-1].content.lower()
-    
-    # Simple keyword-based response logic
-    response = "I'll help you find the perfect clothing based on your vibe! Would you like to specify any preferences for size or budget?"
-    recommendations = []
-    
-    # Process based on keywords in the message
-    if "casual" in last_user_message or "everyday" in last_user_message:
-        response = "For casual wear, I'd recommend checking out our relaxed fit items. Here are some options that might match your vibe!"
-        recommendations = [MOCK_PRODUCTS[0], MOCK_PRODUCTS[1], MOCK_PRODUCTS[3]]
-    
-    elif "formal" in last_user_message or "elegant" in last_user_message or "professional" in last_user_message:
-        response = "For more formal occasions, we have several elegant options. Here are some recommendations that might suit your needs!"
-        recommendations = [MOCK_PRODUCTS[4], MOCK_PRODUCTS[5]]
-    
-    elif "dress" in last_user_message:
-        response = "Looking for a dress? Here's a beautiful option that might match what you're looking for!"
-        recommendations = [MOCK_PRODUCTS[2]]
-    
-    elif "top" in last_user_message or "shirt" in last_user_message or "blouse" in last_user_message:
-        response = "Here are some tops that might match your style!"
-        recommendations = [MOCK_PRODUCTS[0], MOCK_PRODUCTS[3]]
-    
-    elif "bottom" in last_user_message or "pants" in last_user_message or "jeans" in last_user_message or "skirt" in last_user_message:
-        response = "Here are some bottoms that might work for your style!"
-        recommendations = [MOCK_PRODUCTS[1], MOCK_PRODUCTS[5]]
-    
-    # If this is a follow-up message and we have context from previous messages
-    if len(request.messages) > 2:
-        prev_assistant_msg = next((msg for msg in reversed(request.messages) if msg.role == "assistant"), None)
-        if prev_assistant_msg and "specific occasion" in prev_assistant_msg.content.lower():
-            if "work" in last_user_message or "office" in last_user_message:
-                response = "Perfect for work! Here are some professional options that would look great in an office setting."
-                recommendations = [MOCK_PRODUCTS[4], MOCK_PRODUCTS[3]]
-            elif "weekend" in last_user_message or "casual" in last_user_message:
-                response = "For weekend casual wear, these options would be perfect!"
-                recommendations = [MOCK_PRODUCTS[0], MOCK_PRODUCTS[1]]
-    
-    return ChatResponse(response=response, recommendations=recommendations)
+    return {"status": "ok", "version": "1.0.0"}
