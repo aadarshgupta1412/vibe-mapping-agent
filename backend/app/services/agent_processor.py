@@ -103,41 +103,6 @@ class AgentProcessor:
         logger.debug("ℹ️ No resources to clean up")
         logger.info("✅ AgentProcessor resources closed")
     
-    def format_tool_result_content(self, tool_result):
-        """Format tool result content for inclusion in assistant message."""
-        try:
-            import json
-            result_data = json.loads(tool_result["content"])
-            
-            # Handle apparel search results specifically
-            if result_data.get("success") and result_data.get("apparels"):
-                apparels = result_data["apparels"]
-                formatted = f"\n\nI found {len(apparels)} cotton clothing options for you:\n"
-                
-                for idx, apparel in enumerate(apparels[:5], 1):
-                    formatted += f"\n{idx}. **{apparel['name']}** - {apparel['category'].title()}"
-                    formatted += f"\n   • Fabric: {apparel['fabric']}"
-                    formatted += f"\n   • Color/Print: {apparel['color_or_print']}"
-                    formatted += f"\n   • Price: ${apparel['price']}"
-                    formatted += f"\n   • Available sizes: {', '.join(apparel['available_sizes'])}"
-                    if apparel.get('occasion'):
-                        formatted += f"\n   • Occasion: {apparel['occasion']}"
-                    formatted += "\n"
-                
-                if len(apparels) > 5:
-                    formatted += f"\n...and {len(apparels) - 5} more options available!"
-                
-                formatted += "\n\nWould you like more details about any of these items, or would you like me to search for something more specific?"
-                return formatted
-            
-            # Handle other tool results generically
-            else:
-                return f"\n\nBased on the search results: {str(result_data)[:200]}..."
-        
-        except (json.JSONDecodeError, KeyError, TypeError):
-            # Fallback for non-JSON results
-            return f"\n\nTool result: {tool_result['content'][:200]}..."
-
     async def agent_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Main agent node that processes messages and decides whether to use tools or respond.
@@ -175,9 +140,37 @@ class AgentProcessor:
         try:
             logger.info("🔄 Converting messages to Google Gemini format...")
             
-            # Convert messages to Google Gemini format  
+            # Convert messages to Google Gemini format
             gemini_messages = []
-            system_instruction = ""
+            system_instruction = """
+                You are a fashion-savvy shopping assistant that helps customers find clothing based on their vibe descriptions.
+
+                CONVERSATION FLOW:
+                1. When a user asks for clothing with a vibe description (e.g., "something cute for brunch"), ask AT MOST 1-2 targeted follow-up questions to clarify their needs. 
+                2. Focus follow-up questions on critical missing information like category, size, budget, or specific preferences.
+                3. After 1-2 follow-ups, provide product recommendations with clear justification.
+                4. NEVER ask more than 2 follow-up questions.
+
+                RESPONSE FORMATTING:
+                - Use clean, plain text without any formatting symbols like asterisks, bullets, or markdown
+                - Separate different products with clear line breaks
+                - Write in natural, conversational language
+                - Keep responses organized but simple
+                - If you receive a tool response with JSON format, use it to generate a list of products in a readable format
+                - Start numbered lists with a new line and a number followed by a period
+
+                ATTRIBUTE MAPPING:
+                - Translate vibe terms like "casual," "elegant," or "cute" into structured attributes
+                - Map seasonal terms to appropriate fabrics and styles
+                - Infer preferences based on occasion mentions
+
+                RECOMMENDATIONS:
+                - Provide 3-5 specific product recommendations that match both explicit and inferred preferences
+                - Include a brief justification explaining why these items match their vibe
+                - Highlight key features that align with their request using plain text descriptions
+
+                Remember to maintain a helpful, knowledgeable tone and focus on understanding the shopper's needs efficiently.
+            """
             
             for i, msg in enumerate(messages):
                 logger.debug(f"📄 Processing message {i+1}: role={msg['role']}")
@@ -185,40 +178,28 @@ class AgentProcessor:
                 if msg["role"] == "system":
                     system_instruction = msg["content"]
                     logger.debug("🎯 Found system instruction")
-                
                 elif msg["role"] == "user":
                     gemini_messages.append({
                         "role": "user",
                         "parts": [msg["content"]]
                     })
                     logger.debug(f"👤 Added user message: {msg['content'][:50]}...")
-                
                 elif msg["role"] == "assistant":
-                    if msg.get("tool_calls"):
-                        # Add dummy message for tool calls
-                        gemini_messages.append({
-                            "role": "model",
-                            "parts": ["Let me quickly search for you..."]
-                        })
-                        logger.debug("🔧 Added dummy message for tool calls")
-                    else:
-                        # Regular assistant message
-                        content = msg.get("content", "How can I help you?")
-                        gemini_messages.append({
-                            "role": "model", 
-                            "parts": [content]
-                        })
-                        logger.debug(f"🤖 Added assistant message: {content[:50]}...")
-                
-                elif msg["role"] == "tool":
-                    # Convert tool results to user messages
-                    tool_content = f"Here are the search results: {msg['content']}"
+                    if not msg["content"]:
+                        msg["content"] = "Let me help you with that."
                     gemini_messages.append({
-                        "role": "user",
+                        "role": "model",
+                        "parts": [msg["content"]]
+                    })
+                    logger.debug(f"🤖 Added assistant message: {msg['content'][:50]}...")
+                elif msg["role"] == "tool":
+                    # Convert tool messages to model messages to maintain conversation flow
+                    tool_content = f"I used the {msg.get('name', 'tool')} and got: {msg['content']}"
+                    gemini_messages.append({
+                        "role": "model",
                         "parts": [tool_content]
                     })
-                    logger.debug(f"🔧 Added tool result as user message: {msg.get('name', 'unknown')}")
-                
+                    logger.debug(f"🔧 Added tool result as model message: {tool_content[:50]}...")
                 else:
                     logger.warning(f"⚠️ Unknown message role: {msg['role']}, skipping")
             
@@ -433,7 +414,7 @@ class AgentProcessor:
             })
             new_state["current_tool"] = None
             logger.info("🔙 Returning error state")
-            return new_state
+        return new_state
     
     async def tool_node(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -595,7 +576,7 @@ class AgentProcessor:
             logger.warning("⚠️ Maximum tool executions reached (3), ending workflow")
         
         # Otherwise, end the conversation
-        logger.info("�� Ending workflow")
+        logger.info("🏁 Ending workflow")
         return END
     
     def _create_graph(self) -> StateGraph:
