@@ -157,6 +157,7 @@ class AgentProcessor:
                 - Write in natural, conversational language
                 - Keep responses organized but simple
                 - If you receive a tool response with JSON format, use it to generate a list of products in a readable format
+                - If you receive a tool response with a list of products, ALWAYS SHOW APPAREL ID to the user for each product
                 - Start numbered lists with a new line and a number followed by a period
 
                 ATTRIBUTE MAPPING:
