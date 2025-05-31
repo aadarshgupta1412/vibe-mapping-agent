@@ -48,13 +48,22 @@ export function Chat() {
     setRecommendations([]);
 
     try {
-      // Call the API
+      // Add a placeholder for the assistant's message
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "" },
+      ]);
+      
+      // Use simple non-streaming fetch request
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
+        body: JSON.stringify({ 
+          messages: [...messages, userMessage],
+          stream: false  // Set to false for non-streaming
+        }),
       });
 
       if (!response.ok) {
@@ -63,9 +72,9 @@ export function Chat() {
 
       const data = await response.json();
       
-      // Add assistant message to the chat
+      // Update the assistant message
       setMessages((prev) => [
-        ...prev,
+        ...prev.slice(0, -1),
         { role: "assistant", content: data.response },
       ]);
       
@@ -73,10 +82,11 @@ export function Chat() {
       if (data.recommendations && data.recommendations.length > 0) {
         setRecommendations(data.recommendations);
       }
+      
     } catch (error) {
       console.error("Error calling API:", error);
       setMessages((prev) => [
-        ...prev,
+        ...prev.slice(0, -1),
         {
           role: "assistant",
           content: "Sorry, I encountered an error. Please try again.",
