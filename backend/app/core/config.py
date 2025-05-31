@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = Field(default="Vibe Mapping Agent API")
     
     # Server Settings
-    PORT: int = Field(default=8000)
+    PORT: int = Field(default=8080)
     HOST: str = Field(default="0.0.0.0")
     DEBUG: bool = Field(default=True)
     RELOAD: bool = Field(default=True)
