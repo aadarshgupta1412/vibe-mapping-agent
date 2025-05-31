@@ -77,4 +77,4 @@ vibe-mapping-agent/
 - Natural language conversation with follow-up questions
 - Vibe-to-attribute mapping
 - Product recommendations based on user preferences
-- Justification for recommendations
+- Justification for recommendations# Force redeploy from working commit
