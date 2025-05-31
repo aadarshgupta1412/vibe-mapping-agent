@@ -1,6 +1,10 @@
 import * as React from "react"
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-import { cn } from "@/lib/utils"
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
