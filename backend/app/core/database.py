@@ -1,8 +1,7 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from supabase._async.client import AsyncClient as Client
-from supabase._async.client import create_client
+from supabase import create_client, Client
 
 from app.core.config import settings
 
@@ -41,7 +40,17 @@ class DatabaseManager:
         if not settings.SUPABASE_URL or not settings.SUPABASE_KEY:
             raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
         
-        self._supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+        try:
+            # Create client with basic parameters - compatible with gotrue 2.8.1 and httpx 0.25.2
+            self._supabase = create_client(
+                settings.SUPABASE_URL,
+                settings.SUPABASE_KEY
+            )
+            logger.info("✅ Supabase client created successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to create Supabase client: {e}")
+            self._supabase = None
+            raise
     
     async def check_connection(self):
         """Check if the Supabase connection is working"""
@@ -49,15 +58,20 @@ class DatabaseManager:
             # Just check if we have a valid client
             client = self.get_supabase_client()
             if client is not None:
-                # For now, just assume the connection is valid if we have a client
-                # We'll avoid making actual API calls to prevent errors
-                logger.info("Supabase client initialized successfully")
-                return True
+                # Test with a simple query to verify the connection works
+                try:
+                    # Try to get table info (this is a lightweight operation)
+                    response = client.table('apparels').select('id').limit(1).execute()
+                    logger.info("✅ Supabase connection verified successfully")
+                    return True
+                except Exception as e:
+                    logger.warning(f"⚠️ Supabase connection test failed: {e}")
+                    return False
             else:
-                logger.error("Supabase client is None")
+                logger.error("❌ Supabase client is None")
                 return False
         except Exception as e:
-            logger.error(f"Supabase connection error: {e}")
+            logger.error(f"❌ Supabase connection error: {e}")
             return False
     
     def close(self):

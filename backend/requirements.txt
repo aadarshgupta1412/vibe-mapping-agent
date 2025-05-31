@@ -7,6 +7,9 @@ sse-starlette>=1.6.5
 # Database
 supabase>=2.3.4
 sqlalchemy>=2.0.29
+# Lock dependency versions that work with Supabase
+httpx>=0.24,<0.26
+gotrue<2.9
 
 # LLM and conversation flow
 langchain==0.3.13

@@ -54,109 +54,39 @@ export function Chat() {
         { role: "assistant", content: "" },
       ]);
       
-      // Use EventSource for streaming responses
-      if (window.EventSource) {
-        // Create an EventSource that connects directly to our API
-        const eventSource = new EventSource(
-          `/api/chat?${new URLSearchParams({
-            stream: "true",
-            timestamp: Date.now().toString() // Prevent caching
-          })}`
-        );
-        let assistantResponse = "";
-        
-        // Start the request
-        fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ 
-            messages: [...messages, userMessage],
-            stream: true
-          }),
-        }).catch(error => {
-          console.error("Error initiating chat stream:", error);
-          eventSource.close();
-        });
-        
-        // Handle incoming message events
-        eventSource.addEventListener("message", (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === "content") {
-              // Update the assistant's message with the new content
-              assistantResponse += data.content;
-              setMessages((prev) => [
-                ...prev.slice(0, -1),
-                { role: "assistant", content: assistantResponse },
-              ]);
-            } else if (data.type === "recommendations" && data.recommendations) {
-              // Set recommendations
-              setRecommendations(data.recommendations);
-            }
-            
-            // Close the connection when done
-            if (data.done) {
-              eventSource.close();
-            }
-          } catch (error) {
-            console.error("Error parsing event data:", error);
-          }
-        });
-        
-        // Handle error events
-        eventSource.addEventListener("error", (event) => {
-          console.error("EventSource error:", event);
-          eventSource.close();
-          
-          // Update the message with an error notice if it's empty
-          setMessages((prev) => {
-            const lastMessage = prev[prev.length - 1];
-            if (lastMessage.role === "assistant" && !lastMessage.content) {
-              return [
-                ...prev.slice(0, -1),
-                { role: "assistant", content: "Sorry, there was an error processing your request." },
-              ];
-            }
-            return prev;
-          });
-        });
-      } else {
-        // Fallback for browsers that don't support EventSource
-        const response = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ 
-            messages: [...messages, userMessage],
-            stream: false
-          }),
-        });
+      // Use simple non-streaming fetch request
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ 
+          messages: [...messages, userMessage],
+          stream: false  // Set to false for non-streaming
+        }),
+      });
 
-        if (!response.ok) {
-          throw new Error(`Error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        
-        // Update the assistant message
-        setMessages((prev) => [
-          ...prev.slice(0, -1),
-          { role: "assistant", content: data.response },
-        ]);
-        
-        // Set recommendations if available
-        if (data.recommendations && data.recommendations.length > 0) {
-          setRecommendations(data.recommendations);
-        }
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status}`);
       }
+
+      const data = await response.json();
+      
+      // Update the assistant message
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: data.response },
+      ]);
+      
+      // Set recommendations if available
+      if (data.recommendations && data.recommendations.length > 0) {
+        setRecommendations(data.recommendations);
+      }
+      
     } catch (error) {
       console.error("Error calling API:", error);
       setMessages((prev) => [
-        ...prev,
+        ...prev.slice(0, -1),
         {
           role: "assistant",
           content: "Sorry, I encountered an error. Please try again.",

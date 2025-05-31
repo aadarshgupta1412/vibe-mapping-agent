@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = Field(default=None)
     PORTKEY_API_KEY: Optional[str] = Field(default=None)
     PORTKEY_VIRTUAL_KEY: Optional[str] = Field(default=None)
-    LLM_MODEL: Optional[str] = Field(default="gemini-pro")
+    PORTKEY_GATEWAY_URL: Optional[str] = Field(default="https://api.portkey.ai/v1/proxy")
+    LLM_MODEL: Optional[str] = Field(default="gemini-2.0-flash")
     
     # Environment detection
     IS_STREAMLIT: bool = Field(default=False)

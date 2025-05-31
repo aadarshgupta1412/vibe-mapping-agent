@@ -43,7 +43,7 @@ async def startup_services():
         logger.warning("Supabase connection check failed")
     
     # Initialize chat service
-    init_chat_service()
+    await init_chat_service()
     logger.info("Chat service initialized")
     
 # Close services on shutdown

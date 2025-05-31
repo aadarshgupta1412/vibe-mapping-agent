@@ -1,19 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Define product type
-type Product = {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  fabric: string;
-  fit: string;
-  color: string;
-  pattern?: string;
-  style?: string[];
-  occasion?: string[];
-};
-
 // Backend URL
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
