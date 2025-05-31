@@ -23,13 +23,20 @@ if __name__ == "__main__":
     # Command line takes precedence over environment variable
     reload_mode = args.reload or (os.environ.get("RELOAD", "").lower() == "true")
     
-    logger.info(f"Starting server on {settings.HOST}:{settings.PORT}")
+    # Get port from environment (Railway sets this) or use local dev default
+    port = int(os.environ.get("PORT", "8080"))
+    
+    # Log environment variables for debugging
+    logger.info(f"Environment PORT: {os.environ.get('PORT', 'not set')}")
+    logger.info(f"Using PORT: {port}")
+    logger.info(f"Settings HOST: {settings.HOST}")
+    logger.info(f"Starting server on {settings.HOST}:{port}")
     logger.info(f"Debug mode: {settings.DEBUG}, Reload: {reload_mode}")
     
     # Run the server with the determined reload setting
     uvicorn.run(
         "app.main:app", 
         host=settings.HOST, 
-        port=settings.PORT, 
+        port=port, 
         reload=reload_mode
     )
