@@ -56,6 +56,17 @@ class AgentProcessor:
         logger.info("🔧 Initializing tools manager...")
         self._tools_manager = init_tools_manager()
         
+        # Log available tools for debugging
+        if self._tools_manager:
+            available_tools = self._tools_manager.get_tools()
+            logger.info(f"🛠️ Available tools after initialization: {len(available_tools)}")
+            for i, tool in enumerate(available_tools):
+                tool_name = getattr(tool, 'name', f'unknown_tool_{i}')
+                tool_description = getattr(tool, 'description', 'No description')
+                logger.info(f"  📋 Tool {i+1}: {tool_name} - {tool_description[:100]}...")
+        else:
+            logger.error("❌ Tools manager initialization failed!")
+        
         # Create the agent graph
         logger.info("📊 Creating agent graph...")
         self._graph = self._create_graph()
@@ -217,7 +228,9 @@ class AgentProcessor:
             if tools:
                 logger.info(f"🔧 Preparing {len(tools)} tools for Gemini function calling...")
                 
-                for tool in tools:
+                for i, tool in enumerate(tools):
+                    logger.debug(f"🔧 Processing tool {i+1}: {type(tool)}")
+                    
                     tool_name = None
                     tool_description = None
                     tool_parameters = {"type": "object", "properties": {}, "required": []}
@@ -226,12 +239,16 @@ class AgentProcessor:
                     if hasattr(tool, 'name'):
                         tool_name = tool.name
                         tool_description = getattr(tool, 'description', f"Tool: {tool_name}")
+                        logger.debug(f"🔧 Tool {i+1} name: {tool_name}")
+                        logger.debug(f"🔧 Tool {i+1} description: {tool_description[:100]}...")
                         
                         # Try to get parameters from the tool's args_schema
                         if hasattr(tool, 'args_schema') and tool.args_schema:
                             try:
+                                logger.debug(f"🔧 Extracting schema for tool: {tool_name}")
                                 # Convert Pydantic schema to Gemini format
                                 schema = tool.args_schema.model_json_schema()
+                                logger.debug(f"🔧 Raw schema for {tool_name}: {json.dumps(schema, indent=2)}")
                                 
                                 # Ensure we have the right structure for Gemini
                                 tool_parameters = {
@@ -267,11 +284,14 @@ class AgentProcessor:
                                     clean_properties[prop_name] = clean_prop
                                 
                                 tool_parameters["properties"] = clean_properties
+                                logger.debug(f"🔧 Cleaned parameters for {tool_name}: {json.dumps(tool_parameters, indent=2)}")
                                 
                             except Exception as e:
                                 logger.warning(f"⚠️ Error extracting schema for tool {tool_name}: {e}")
                                 # Use default empty object schema
                                 tool_parameters = {"type": "object", "properties": {}, "required": []}
+                        else:
+                            logger.debug(f"🔧 No args_schema found for tool: {tool_name}")
                         
                     elif isinstance(tool, dict) and 'name' in tool:
                         tool_name = tool['name']
@@ -286,6 +306,7 @@ class AgentProcessor:
                                 tool_parameters["properties"] = {}
                             if "required" not in tool_parameters:
                                 tool_parameters["required"] = []
+                        logger.debug(f"🔧 Dict tool {tool_name} with parameters: {tool_parameters}")
                     
                     if tool_name:
                         gemini_tool = {
@@ -296,9 +317,20 @@ class AgentProcessor:
                             }]
                         }
                         gemini_tools.append(gemini_tool)
-                        logger.debug(f"🔧 Added tool: {tool_name} with parameters: {tool_parameters}")
+                        logger.info(f"✅ Added tool to Gemini: {tool_name}")
+                        logger.debug(f"🔧 Full Gemini tool config: {json.dumps(gemini_tool, indent=2)}")
+                    else:
+                        logger.warning(f"⚠️ Skipping tool {i+1} - no name found")
                 
                 logger.info(f"✅ Prepared {len(gemini_tools)} tools for Gemini")
+                
+                # Log the final tools configuration for debugging
+                if gemini_tools:
+                    logger.debug("🔧 FINAL GEMINI TOOLS CONFIGURATION:")
+                    for i, tool in enumerate(gemini_tools):
+                        logger.debug(f"  Tool {i+1}: {json.dumps(tool, indent=2)}")
+            else:
+                logger.info("⚠️ No tools available for this request")
             
             # Generate LLM response with function calling capability
             logger.info("🤖 Generating LLM response with function calling...")
@@ -323,18 +355,26 @@ class AgentProcessor:
                 # Extract response text and tool calls
                 if response and hasattr(response, 'candidates') and response.candidates:
                     candidate = response.candidates[0]
+                    logger.debug(f"📝 Processing candidate with content: {hasattr(candidate, 'content')}")
                     
                     if hasattr(candidate, 'content') and candidate.content:
                         # Extract text content
                         if hasattr(candidate.content, 'parts') and candidate.content.parts:
-                            for part in candidate.content.parts:
+                            logger.debug(f"📝 Found {len(candidate.content.parts)} content parts")
+                            
+                            for j, part in enumerate(candidate.content.parts):
+                                logger.debug(f"📝 Processing part {j+1}: has_text={hasattr(part, 'text')}, has_function_call={hasattr(part, 'function_call')}")
+                                
                                 if hasattr(part, 'text') and part.text:
                                     response_text += part.text
-                                    logger.debug(f"📝 Added text part: {part.text[:50]}...")
+                                    logger.debug(f"📝 Added text part {j+1}: {part.text[:50]}...")
                                 
                                 # Check for function calls
                                 elif hasattr(part, 'function_call') and part.function_call:
                                     function_call = part.function_call
+                                    logger.info(f"🔧 FOUND FUNCTION CALL: {function_call.name}")
+                                    logger.debug(f"🔧 Function call args: {dict(function_call.args) if function_call.args else {}}")
+                                    
                                     tool_call = {
                                         "name": function_call.name,
                                         "args": dict(function_call.args) if function_call.args else {},
@@ -342,7 +382,24 @@ class AgentProcessor:
                                         "type": "tool_call"
                                     }
                                     tool_calls.append(tool_call)
-                                    logger.info(f"🔧 Found tool call: {function_call.name}")
+                                    logger.info(f"✅ Added tool call: {function_call.name} with args: {tool_call['args']}")
+                                else:
+                                    logger.debug(f"📝 Part {j+1} has no text or function_call content")
+                        else:
+                            logger.debug("📝 Candidate content has no parts")
+                    else:
+                        logger.debug("📝 Candidate has no content")
+                else:
+                    logger.debug("📝 Response has no candidates")
+                
+                # Log the extraction results
+                logger.info(f"📝 Extracted response_text length: {len(response_text)}")
+                logger.info(f"🔧 Extracted tool_calls count: {len(tool_calls)}")
+                if response_text:
+                    logger.debug(f"📝 Response text preview: {response_text[:200]}...")
+                if tool_calls:
+                    for i, tc in enumerate(tool_calls):
+                        logger.info(f"🔧 Tool call {i+1}: {tc['name']} with {len(tc['args'])} arguments")
                 
                 # Fallback text extraction
                 elif response and hasattr(response, 'text') and response.text:
@@ -357,22 +414,37 @@ class AgentProcessor:
                 
                 # Handle tool calls vs direct response
                 if tool_calls:
-                    logger.info(f"🔧 Found {len(tool_calls)} tool calls, setting up tool execution...")
+                    logger.info(f"🔧 PROCESSING {len(tool_calls)} TOOL CALLS...")
                     
                     # Set the first tool call for execution
                     new_state["current_tool"] = tool_calls[0]
+                    logger.info(f"🎯 Setting up execution for first tool: {tool_calls[0]['name']}")
+                    logger.debug(f"🎯 Tool arguments: {tool_calls[0]['args']}")
                     
                     # Add assistant message with tool calls (only include response_text if it exists)
-                    new_state["messages"].append({
+                    assistant_message = {
                         "role": "assistant",
                         "content": response_text,  # Use actual response_text, even if empty
                         "tool_calls": tool_calls
-                    })
+                    }
+                    new_state["messages"].append(assistant_message)
+                    logger.info(f"📝 Added assistant message with {len(tool_calls)} tool calls")
                     
-                    logger.info(f"✅ Set up tool execution for: {tool_calls[0]['name']}")
+                    logger.info(f"✅ TOOL EXECUTION SETUP COMPLETE: {tool_calls[0]['name']}")
                 
                 else:
-                    logger.info("💬 No tool calls found, adding direct response...")
+                    logger.info("💬 NO TOOL CALLS FOUND - providing direct response...")
+                    
+                    # Log why no tool calls were found
+                    if gemini_tools:
+                        logger.warning(f"⚠️ Expected tool calls but found none. Tools were available: {[t['function_declarations'][0]['name'] for t in gemini_tools]}")
+                        logger.debug(f"📝 Response object type: {type(response)}")
+                        logger.debug(f"📝 Response has candidates: {hasattr(response, 'candidates') and bool(response.candidates)}")
+                        if hasattr(response, 'candidates') and response.candidates:
+                            candidate = response.candidates[0]
+                            logger.debug(f"📝 Candidate has content: {hasattr(candidate, 'content')}")
+                            if hasattr(candidate, 'content') and candidate.content:
+                                logger.debug(f"📝 Content has parts: {hasattr(candidate.content, 'parts') and bool(candidate.content.parts)}")
                     
                     # Direct response without tools
                     new_state["messages"].append({

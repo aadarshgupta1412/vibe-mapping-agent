@@ -49,14 +49,18 @@ async def startup_services():
 # Close services on shutdown
 @app.on_event("shutdown")
 async def shutdown_services():
-    logger.info("Shutting down services")
-    # Close chat service
-    close_chat_service()
-    logger.info("Chat service closed")
-    
-    # Close database connections
-    close_db()
-    logger.info("Database connections closed")
+    try:
+        logger.info("Shutting down services")
+        # Close chat service
+        close_chat_service()
+        logger.info("Chat service closed")
+        
+        # Close database connections
+        close_db()
+        logger.info("Database connections closed")
+    except Exception as e:
+        logger.warning(f"Exception during shutdown: {e}")
+        # Continue shutdown gracefully
 
 # Define models
 class Message(BaseModel):

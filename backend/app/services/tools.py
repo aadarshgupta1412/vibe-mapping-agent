@@ -7,6 +7,7 @@ such as finding apparels based on various filters using the Supabase database.
 
 import logging
 from typing import Any, Dict, List, Optional, Union
+import json
 
 from langchain.tools import BaseTool, tool
 
@@ -33,27 +34,36 @@ class ToolsManager:
         """Initialize the ToolsManager."""
         self._tools = None
         self._supabase = None
+        logger.info("🔧 ToolsManager initialized")
     
     def init(self):
         """Initialize the tools."""
+        logger.info("🚀 Initializing ToolsManager...")
+        
         if self._tools:
+            logger.info("✅ Tools already initialized, returning existing tools")
             return self._tools
         
         # Initialize Supabase client
         try:
+            logger.info("🔗 Connecting to Supabase client...")
             self._supabase = get_supabase_client()
-            logger.info("Supabase client initialized for tools")
+            logger.info("✅ Supabase client initialized successfully for tools")
         except Exception as e:
-            logger.error(f"Failed to initialize Supabase client: {e}")
+            logger.error(f"❌ Failed to initialize Supabase client: {e}")
             self._supabase = None
         
         # Initialize the tools
+        logger.info("🛠️ Creating tool instances...")
         self._tools = self.get_tools()
+        logger.info(f"✅ ToolsManager initialization complete with {len(self._tools)} tools")
         return self._tools
     
     def close(self):
         """Close any resources."""
+        logger.info("🔄 Closing ToolsManager resources...")
         self._supabase = None
+        logger.info("✅ ToolsManager resources closed")
     
     def get_tools(self) -> List[BaseTool]:
         """
@@ -62,17 +72,15 @@ class ToolsManager:
         Returns:
             List[BaseTool]: A list of available tools.
         """
+        logger.info("📋 Getting tools list...")
+        
         all_tools = [
             self._find_apparels_wrapper(),
             self._get_apparel_details_wrapper(),
         ]
         
         tool_names = [getattr(tool, "name", str(tool)) for tool in all_tools]
-        logger.debug(
-            "Returning %d tools: %s",
-            len(all_tools),
-            tool_names
-        )
+        logger.info(f"✅ Returning {len(all_tools)} tools: {tool_names}")
         
         return all_tools
     
@@ -272,8 +280,33 @@ class ToolsManager:
                 - filters_applied: Dictionary of filters that were applied
                 - suggestions: Alternative suggestions if no results found
             """
+            logger.info("🔍 TOOL CALLED: find_apparels")
+            
+            # Log all input parameters
+            params = {
+                'category': category,
+                'color_or_print': color_or_print,
+                'fabric': fabric,
+                'fit': fit,
+                'occasion': occasion,
+                'size': size,
+                'sleeve_length': sleeve_length,
+                'neckline': neckline,
+                'length': length,
+                'pant_type': pant_type,
+                'max_price': max_price,
+                'min_price': min_price,
+                'limit': limit,
+                'sort_by': sort_by,
+                'sort_order': sort_order,
+            }
+            
+            # Filter out None values for cleaner logging
+            non_none_params = {k: v for k, v in params.items() if v is not None}
+            logger.info(f"📝 Tool parameters received: {non_none_params}")
+            
             if not self._supabase:
-                return {
+                error_result = {
                     "success": False,
                     "apparels": [],
                     "count": 0,
@@ -282,20 +315,29 @@ class ToolsManager:
                     "filters_applied": {},
                     "suggestions": []
                 }
+                logger.error("❌ Supabase client not available")
+                logger.info(f"📤 Tool response size: {len(json.dumps(error_result))} chars")
+                return error_result
             
             try:
+                logger.info("🔧 Validating and processing inputs...")
+                
                 # Validate and adjust inputs
                 limit = min(max(1, limit or 20), 100)  # Ensure between 1-100
                 sort_by = sort_by if sort_by in ['name', 'price', 'id'] else 'name'
                 sort_order = sort_order if sort_order in ['asc', 'desc'] else 'asc'
                 
+                logger.debug(f"📊 Processed inputs - limit: {limit}, sort_by: {sort_by}, sort_order: {sort_order}")
+                
                 # Get total count for context
+                logger.info("📊 Getting total apparel count from database...")
                 total_response = self._supabase.table('apparels').select('id', count='exact').execute()
                 total_in_db = total_response.count if total_response.count else 0
+                logger.info(f"📈 Total apparels in database: {total_in_db}")
                 
                 # Check if database is empty
                 if total_in_db == 0:
-                    return {
+                    empty_result = {
                         "success": True,
                         "apparels": [],
                         "count": 0,
@@ -304,8 +346,12 @@ class ToolsManager:
                         "filters_applied": {},
                         "suggestions": ["Please contact support to ensure the database is properly populated with apparel items."]
                     }
+                    logger.warning("⚠️ Database is empty")
+                    logger.info(f"📤 Tool response size: {len(json.dumps(empty_result))} chars")
+                    return empty_result
                 
                 # Start building the query
+                logger.info("🔗 Building Supabase query...")
                 query = self._supabase.table('apparels').select('*')
                 
                 # Apply filters using the helper method
@@ -324,23 +370,36 @@ class ToolsManager:
                     'max_price': max_price,
                 }
                 
+                logger.info("🎯 Applying filters to query...")
                 query, applied_filters = self._build_search_query(query, filters)
+                logger.info(f"🎯 Applied filters: {applied_filters}")
                 
                 # Apply sorting
+                logger.info(f"📊 Applying sorting: {sort_by} {sort_order}")
                 if sort_order == 'desc':
                     query = query.order(sort_by, desc=True)
                 else:
                     query = query.order(sort_by)
                 
                 # Apply limit
+                logger.info(f"📏 Applying limit: {limit}")
                 query = query.limit(limit)
                 
                 # Execute the query
+                logger.info("🚀 Executing Supabase query...")
                 response = query.execute()
+                logger.info(f"✅ Query executed successfully, response data length: {len(response.data) if response.data else 0}")
                 
                 if response.data:
                     apparels = response.data
                     count = len(apparels)
+                    
+                    logger.info(f"🎉 Found {count} apparels")
+                    
+                    # Log details about found apparels
+                    if count > 0:
+                        apparel_ids = [apparel.get('id', 'unknown') for apparel in apparels[:5]]  # Log first 5 IDs
+                        logger.info(f"📋 Found apparel IDs (first 5): {apparel_ids}")
                     
                     # Generate enhanced message
                     if count > 0:
@@ -362,7 +421,7 @@ class ToolsManager:
                     else:
                         message = "No apparels found matching your criteria."
                     
-                    return {
+                    result = {
                         "success": True,
                         "apparels": apparels,
                         "count": count,
@@ -371,8 +430,12 @@ class ToolsManager:
                         "filters_applied": applied_filters,
                         "suggestions": self._generate_suggestions(applied_filters) if count == 0 else []
                     }
+                    
+                    logger.info(f"📤 Tool response size: {len(json.dumps(result, default=str))} chars")
+                    logger.info(f"✅ TOOL SUCCESS: find_apparels returned {count} results")
+                    return result
                 else:
-                    return {
+                    no_results = {
                         "success": True,
                         "apparels": [],
                         "count": 0,
@@ -381,10 +444,16 @@ class ToolsManager:
                         "filters_applied": applied_filters,
                         "suggestions": self._generate_suggestions(applied_filters)
                     }
+                    logger.info("📤 No results found")
+                    logger.info(f"📤 Tool response size: {len(json.dumps(no_results))} chars")
+                    return no_results
                     
             except Exception as e:
-                logger.error(f"Error in find_apparels tool: {str(e)}")
-                return {
+                error_msg = f"Error in find_apparels tool: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                logger.exception("Full exception details:")
+                
+                error_result = {
                     "success": False,
                     "apparels": [],
                     "count": 0,
@@ -393,6 +462,8 @@ class ToolsManager:
                     "filters_applied": {},
                     "suggestions": []
                 }
+                logger.info(f"📤 Tool error response size: {len(json.dumps(error_result))} chars")
+                return error_result
         
         return find_apparels
     
@@ -433,45 +504,70 @@ class ToolsManager:
                 - apparel: Complete details of the apparel item
                 - message: A message describing the result
             """
+            logger.info("🔍 TOOL CALLED: get_apparel_details")
+            logger.info(f"📝 Tool parameter - apparel_id: {apparel_id}")
+            
             if not self._supabase:
-                return {
+                error_result = {
                     "success": False,
                     "apparel": None,
                     "message": "Database connection not available"
                 }
+                logger.error("❌ Supabase client not available")
+                logger.info(f"📤 Tool response size: {len(json.dumps(error_result))} chars")
+                return error_result
             
             if not apparel_id or not apparel_id.strip():
-                return {
+                invalid_result = {
                     "success": False,
                     "apparel": None,
                     "message": "Please provide a valid apparel ID"
                 }
+                logger.warning("⚠️ Invalid apparel_id provided")
+                logger.info(f"📤 Tool response size: {len(json.dumps(invalid_result))} chars")
+                return invalid_result
             
             try:
+                logger.info(f"🔗 Querying database for apparel ID: {apparel_id.strip()}")
+                
                 # Query for the specific apparel item
                 response = self._supabase.table('apparels').select('*').eq('id', apparel_id.strip()).execute()
+                logger.info(f"✅ Query executed, response data length: {len(response.data) if response.data else 0}")
                 
                 if response.data and len(response.data) > 0:
                     apparel = response.data[0]
-                    return {
+                    logger.info(f"🎉 Found apparel: {apparel.get('name', 'unknown name')}")
+                    
+                    result = {
                         "success": True,
                         "apparel": apparel,
                         "message": f"Found details for {apparel.get('name', apparel_id)}"
                     }
+                    logger.info(f"📤 Tool response size: {len(json.dumps(result, default=str))} chars")
+                    logger.info(f"✅ TOOL SUCCESS: get_apparel_details found item")
+                    return result
                 else:
-                    return {
+                    not_found_result = {
                         "success": False,
                         "apparel": None,
                         "message": f"No apparel found with ID: {apparel_id}"
                     }
+                    logger.warning(f"⚠️ No apparel found with ID: {apparel_id}")
+                    logger.info(f"📤 Tool response size: {len(json.dumps(not_found_result))} chars")
+                    return not_found_result
                     
             except Exception as e:
-                logger.error(f"Error in get_apparel_details tool: {str(e)}")
-                return {
+                error_msg = f"Error in get_apparel_details tool: {str(e)}"
+                logger.error(f"❌ {error_msg}")
+                logger.exception("Full exception details:")
+                
+                error_result = {
                     "success": False,
                     "apparel": None,
                     "message": f"An error occurred while fetching details: {str(e)}"
                 }
+                logger.info(f"📤 Tool error response size: {len(json.dumps(error_result))} chars")
+                return error_result
         
         return get_apparel_details
 
@@ -483,16 +579,23 @@ def get_tools_manager():
     """Get the singleton instance of ToolsManager"""
     global _tools_manager_instance
     if _tools_manager_instance is None:
+        logger.info("🆕 Creating new ToolsManager instance")
         _tools_manager_instance = ToolsManager()
+    else:
+        logger.debug("♻️ Returning existing ToolsManager instance")
     return _tools_manager_instance
 
 def init_tools_manager():
     """Initialize the tools manager"""
+    logger.info("🚀 Initializing tools manager singleton...")
     manager = get_tools_manager()
-    manager.init()
+    tools = manager.init()
+    logger.info(f"✅ Tools manager initialized with {len(tools) if tools else 0} tools")
     return manager
 
 def close_tools_manager():
     """Close the tools manager"""
+    logger.info("🔄 Closing tools manager singleton...")
     manager = get_tools_manager()
     manager.close()
+    logger.info("✅ Tools manager closed")
