@@ -93,7 +93,7 @@ class AgentProcessor:
                     model_name=LLM_MODEL,
                     generation_config=genai.types.GenerationConfig(
                     temperature=0.7,
-                        max_output_tokens=2048,  # Increased from 512 to handle tool responses
+                    max_output_tokens=2048,  # Increased from 512 to handle tool responses
                     )
                 )
                 
